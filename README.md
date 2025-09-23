@@ -1,234 +1,182 @@
 # N8N AI Workflow Stack
 
-A professional Docker Compose setup for running n8n with local AI capabilities using Ollama and PostgreSQL database.
+Professional Docker Compose setup for n8n with local AI capabilities using Ollama and PostgreSQL.
 
-## 🏗️ Architecture
+## 🚀 TLDR - Quick Development Setup
 
-This stack includes:
+**Need to start immediately? Run these commands:**
 
-- **n8n**: Workflow automation platform with AI integration
-- **PostgreSQL**: Persistent database for n8n data
-- **Ollama**: Local AI model inference server
-- **Traefik**: Optional reverse proxy for production deployments
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Docker Engine 20.10+
-- Docker Compose 2.0+
-- At least 4GB RAM (8GB+ recommended for AI models)
-- GPU support (optional, for faster AI inference)
-
-### Setup
-
-1. **Clone or download this setup**
-   ```bash
-   git clone <your-repo> n8n-ai-stack
-   cd n8n-ai-stack
-   ```
-
-2. **Configure environment variables**
-   ```bash
-   cp .env.example .env
-   ```
-
-3. **Edit the `.env` file**
-   ```bash
-   nano .env
-   ```
-
-   **Required changes:**
-   - Set secure passwords for `POSTGRES_PASSWORD` and `POSTGRES_NON_ROOT_PASSWORD`
-   - Generate secure keys for `N8N_ENCRYPTION_KEY` and `N8N_JWT_SECRET`
-
-   **Generate secure keys:**
-   ```bash
-   # For N8N_ENCRYPTION_KEY (32 characters)
-   openssl rand -base64 32
-
-   # For N8N_JWT_SECRET (64 characters)
-   openssl rand -base64 64
-   ```
-
-4. **Create required directories**
-   ```bash
-   mkdir -p custom-nodes backups init-scripts
-   ```
-
-5. **Start the stack**
-   ```bash
-   docker-compose up -d
-   ```
-
-6. **Verify services are running**
-   ```bash
-   docker-compose ps
-   ```
-
-## 🔧 Service Configuration
-
-### N8N Access
-- Web interface: http://localhost:5678
-- Create your admin account on first visit
-- Configure AI nodes to use: http://ollama:11434
-
-### Ollama Management
+**CPU-only (works everywhere):**
 ```bash
-# List installed models
-docker exec n8n-ai-stack_ollama ollama list
-
-# Install popular models for n8n workflows
-docker exec n8n-ai-stack_ollama ollama pull llama2
-docker exec n8n-ai-stack_ollama ollama pull codellama
-docker exec n8n-ai-stack_ollama ollama pull mistral
-docker exec n8n-ai-stack_ollama ollama pull phi
-
-# Check Ollama status
-curl http://localhost:11434/api/version
+./scripts/generate-env.sh    # Creates secure .env file
+./scripts/start.sh           # Starts development stack (CPU)
+./scripts/manage-models.sh recommended  # Installs AI models
 ```
 
-### PostgreSQL Access
+**With GPU acceleration (if available):**
 ```bash
-# Connect to database
-docker exec -it n8n-ai-stack_postgres psql -U n8n -d n8n
-
-# Backup database
-docker exec n8n-ai-stack_postgres pg_dump -U n8n n8n > backups/n8n_backup_$(date +%Y%m%d_%H%M%S).sql
+./scripts/generate-env.sh    # Creates secure .env file
+./scripts/start.sh -g        # Starts with GPU acceleration
+./scripts/manage-models.sh recommended  # Installs AI models
 ```
 
-## 🎯 Using AI in N8N Workflows
+**Access your services:**
+- **n8n**: http://localhost:5678 (create admin account on first visit)
+- **PgAdmin**: http://localhost:5050 (admin@n8n.local / admin123)
+- **Ollama API**: http://localhost:11434
 
-### Configuring Ollama in N8N
+**Configure AI in n8n:**
+1. Add LLM/AI Agent node
+2. Select "Custom OpenAI-compatible API"
+3. Base URL: `http://ollama:11434/v1`
+4. Model: any installed model (use `./scripts/manage-models.sh list` to see available)
+5. API Key: leave empty
 
-1. In n8n, add an **AI Agent** or **LLM** node
-2. Select **Custom/Generic OpenAI-compatible API**
-3. Configure:
-   - **Base URL**: `http://ollama:11434/v1`
-   - **Model**: Use any model you've pulled (e.g., `llama2`, `mistral`)
-   - **API Key**: Leave empty (not required for local Ollama)
+---
 
-### Recommended Models for Different Tasks
+## 📋 Prerequisites
 
-| Task | Recommended Model | Size | Use Case |
-|------|------------------|------|----------|
-| Text Generation | `llama2` | 3.8GB | General purpose text tasks |
-| Code Generation | `codellama` | 3.8GB | Programming and code analysis |
-| Fast Responses | `phi` | 1.6GB | Quick text processing |
-| Instruction Following | `mistral` | 4.1GB | Complex task execution |
+- Docker & Docker Compose
+- 4GB+ RAM (8GB+ recommended)
+- Optional: NVIDIA GPU for faster AI
 
-## 📁 Directory Structure
+## 🔧 Basic Usage
 
-```
-n8n-ai-stack/
-├── docker-compose.yml      # Main orchestration file
-├── .env.example           # Environment template
-├── .env                   # Your configuration (create this)
-├── README.md              # This file
-├── custom-nodes/          # Custom n8n nodes
-├── backups/              # Database backups
-└── init-scripts/         # PostgreSQL init scripts
-```
-
-## 🔐 Security Considerations
-
-### For Development
-- Change default passwords in `.env`
-- Use generated encryption keys
-- Keep `.env` file secure and don't commit it
-
-### For Production
-- Use Docker secrets instead of environment variables
-- Enable SSL/TLS with proper certificates
-- Configure firewall rules (expose only necessary ports)
-- Set up regular automated backups
-- Enable Traefik profile for reverse proxy
-
-## 🚀 Production Deployment
-
-### Enable Traefik Reverse Proxy
+### Start Development Environment
 ```bash
-# Configure domain and email in .env
-DOMAIN=yourdomain.com
-ACME_EMAIL=your-email@yourdomain.com
-
-# Start with production profile
-docker-compose --profile production up -d
+./scripts/start.sh                # Full dev stack with PgAdmin
+./scripts/start.sh -m             # + auto-install AI models
+./scripts/start.sh -g             # + GPU acceleration
 ```
 
-### SSL/TLS Configuration
-The Traefik service automatically handles Let's Encrypt certificates when properly configured.
-
-## 🛠️ Maintenance
-
-### Updates
+### Manage AI Models
 ```bash
-# Pull latest images
-docker-compose pull
-
-# Restart with new images
-docker-compose up -d
+./scripts/manage-models.sh list           # Show installed models
+./scripts/manage-models.sh pull mistral   # Install specific model
+./scripts/manage-models.sh test llama2    # Test a model
 ```
 
-### Backups
+### Check Status & Logs
 ```bash
-# Automated backup script
-./scripts/backup.sh
+./scripts/status.sh              # System health check
+./scripts/validate.sh            # Diagnose configuration issues
+docker-compose logs -f n8n       # Follow n8n logs
+docker-compose ps                # Service status
 ```
 
-### Logs
+### Stop Everything
 ```bash
-# View all logs
-docker-compose logs -f
-
-# View specific service logs
-docker-compose logs -f n8n
-docker-compose logs -f ollama
-docker-compose logs -f postgres
+docker-compose down              # Stop services
+docker-compose down -v           # Stop + remove data
 ```
-
-## 🔧 Troubleshooting
-
-### Common Issues
-
-**n8n won't start**
-- Check PostgreSQL is healthy: `docker-compose ps`
-- Verify database credentials in `.env`
-- Check logs: `docker-compose logs n8n`
-
-**Ollama models not working**
-- Ensure models are pulled: `docker exec n8n-ai-stack_ollama ollama list`
-- Check Ollama is accessible: `curl http://localhost:11434/api/version`
-- Verify n8n can reach ollama: `docker exec n8n-ai-stack_n8n ping ollama`
-
-**Performance issues**
-- Increase Docker memory allocation
-- For GPU acceleration, ensure NVIDIA Docker runtime is installed
-- Consider using smaller models (phi, mistral-7b)
 
 ### Reset Everything
 ```bash
-# Stop and remove all containers and volumes
-docker-compose down -v
-
-# Remove all data (⚠️ This deletes everything!)
-docker volume prune -f
-
-# Start fresh
-docker-compose up -d
+docker-compose down -v       # Remove all data
+rm .env                      # Remove configuration
+./scripts/generate-env.sh    # Start fresh
+./scripts/start.sh
 ```
 
-## 📚 Useful Resources
+**💡 Having issues?** Run `./scripts/validate.sh` to diagnose problems, or `./scripts/status.sh` for health checks.
+
+## 🏗️ What's Included
+
+| Service | Purpose | Development | Production |
+|---------|---------|-------------|------------|
+| **n8n** | Workflow automation | http://localhost:5678 | Via Traefik SSL |
+| **PostgreSQL** | Database | Exposed port + PgAdmin | Internal only |
+| **Ollama** | Local AI models | CPU/GPU flexible | GPU-optimized |
+| **PgAdmin** | Database admin | ✅ Included | ❌ Not included |
+| **Traefik** | Reverse proxy | ❌ Not used | ✅ SSL termination |
+
+## 🔧 Configuration
+
+### Environment Setup
+```bash
+cp .env.example .env             # Manual setup
+./scripts/generate-env.sh        # Automated secure setup
+```
+
+### Production Deployment
+```bash
+./scripts/start.sh -e production # Starts with SSL, security hardening
+```
+
+**Production requirements:**
+- Set `DOMAIN` and `ACME_EMAIL` in .env
+- Uncomment Traefik variables
+- Use `./scripts/validate.sh` to check config
+
+### Custom Configuration
+Edit `.env` file to customize:
+- **Ports**: Change if default ports conflict
+- **Resources**: Adjust memory/CPU limits
+- **Paths**: Customize data directories
+- **Security**: Set encryption keys and passwords
+
+## 📁 Project Structure
+
+```
+n8n-ai-stack/
+├── docker-compose.yml          # Base configuration
+├── docker-compose.dev.yml      # Development overrides
+├── docker-compose.prod.yml     # Production overrides
+├── .env.example               # Configuration template
+├── scripts/                   # Management scripts
+│   ├── start.sh              # Start stack
+│   ├── validate.sh           # Validate config
+│   ├── manage-models.sh      # AI model management
+│   ├── generate-env.sh       # Create secure .env
+│   └── backup.sh             # Database backup
+├── custom-nodes/             # n8n custom nodes
+├── backups/                  # Database backups
+└── logs/                     # Application logs
+```
+
+## 🛠️ Development Tips
+
+### Useful Commands
+```bash
+# Backup database
+./scripts/backup.sh
+
+# Update to latest images
+docker-compose pull && docker-compose up -d
+
+# Access database directly
+docker exec -it n8n-ai-stack_postgres psql -U postgres -d n8n
+
+# Monitor resources
+docker stats
+
+# Follow all logs
+docker-compose logs -f
+```
+
+### Custom Nodes Development
+- Place custom nodes in `./custom-nodes/`
+- They auto-mount to `/home/node/.n8n/custom` in development
+- Restart n8n service to reload: `docker-compose restart n8n`
+
+### Environment Variables
+All settings in `.env.example` are documented with examples. Key ones:
+- `N8N_ENCRYPTION_KEY`: Must be 32+ characters
+- `POSTGRES_PASSWORD`: Database admin password
+- `COMPOSE_PROJECT_NAME`: Prefix for container names
+
+## 📚 Resources
 
 - [n8n Documentation](https://docs.n8n.io/)
-- [Ollama Model Library](https://ollama.ai/library)
-- [PostgreSQL Documentation](https://www.postgresql.org/docs/)
+- [Ollama Models](https://ollama.ai/library)
 - [Docker Compose Reference](https://docs.docker.com/compose/)
 
 ## 🤝 Contributing
 
-Feel free to submit issues and enhancement requests!
+1. Test changes with `./scripts/validate.sh`
+2. Update documentation as needed
+3. Submit PRs with clear descriptions
 
 ## 📄 License
 
-This configuration is provided as-is under the MIT License.
+MIT License - see LICENSE file for details.

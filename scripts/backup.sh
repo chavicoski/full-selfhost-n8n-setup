@@ -1,7 +1,43 @@
 #!/bin/bash
 
-# N8N PostgreSQL Backup Script
-# This script creates a backup of the n8n database
+# ==============================================================================
+# N8N AI STACK DATABASE BACKUP SCRIPT
+# ==============================================================================
+#
+# PURPOSE:
+#   Creates compressed backups of the n8n PostgreSQL database with automatic
+#   retention management and error handling.
+#
+# REQUIREMENTS:
+#   - Docker and Docker Compose running
+#   - PostgreSQL container must be healthy
+#   - Write permissions to backup directory
+#
+# CONFIGURATION:
+#   Environment variables (from .env file):
+#   - COMPOSE_PROJECT_NAME: Container name prefix (default: n8n-ai-stack)
+#   - POSTGRES_DB: Database name (default: n8n)
+#   - POSTGRES_USER: Database user (default: postgres)
+#
+# USAGE:
+#   ./scripts/backup.sh
+#
+# EXAMPLES:
+#   # Basic backup
+#   ./scripts/backup.sh
+#
+#   # Backup with custom environment
+#   COMPOSE_PROJECT_NAME=my-n8n ./scripts/backup.sh
+#
+# OUTPUT:
+#   - Backup file: ./backups/n8n_backup_YYYYMMDD_HHMMSS.sql.gz
+#   - Automatic cleanup: Removes backups older than 7 days
+#
+# EXIT CODES:
+#   0: Success
+#   1: Error (container not running, backup failed, etc.)
+#
+# ==============================================================================
 
 set -e
 
