@@ -199,7 +199,7 @@ docker-compose logs -f postgres
 **Ollama models not working**
 - Ensure models are pulled: `docker exec n8n-ai-stack_ollama ollama list`
 - Check Ollama is accessible: `curl http://localhost:11434/api/version`
-- Verify n8n can reach ollama: `docker exec n8n-ai-stack_app ping ollama`
+- Verify n8n can reach ollama: `docker exec n8n-ai-stack_n8n ping ollama`
 
 **Performance issues**
 - Increase Docker memory allocation
