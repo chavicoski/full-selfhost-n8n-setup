@@ -202,7 +202,7 @@ show_resource_usage() {
 
     # Show disk usage
     echo "Disk Usage:"
-    du -sh "$PROJECT_ROOT"/{data,backups,logs,custom-nodes} 2>/dev/null | head -10 || true
+    du -sh "${N8N_BACKUPS_PATH:-./backups}" "${N8N_LOGS_PATH:-./logs}" "${N8N_CUSTOM_NODES_PATH:-./custom-nodes}" 2>/dev/null | head -10 || true
     echo
 
     # Docker volumes

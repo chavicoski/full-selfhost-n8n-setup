@@ -386,9 +386,9 @@ check_directories() {
     )
 
     local optional_dirs=(
-        "custom-nodes"
-        "backups"
-        "logs"
+        "${N8N_CUSTOM_NODES_PATH:-./custom-nodes}"
+        "${N8N_BACKUPS_PATH:-./backups}"
+        "${N8N_LOGS_PATH:-./logs}"
         "data"
     )
 

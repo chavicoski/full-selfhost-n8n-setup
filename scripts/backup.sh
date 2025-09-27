@@ -50,7 +50,7 @@ fi
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-n8n-ai-stack}
 POSTGRES_DB=${POSTGRES_DB:-n8n}
 POSTGRES_USER=${POSTGRES_USER:-postgres}
-BACKUP_DIR="./backups"
+BACKUP_DIR="${N8N_BACKUPS_PATH:-./backups}"
 
 # Create backup directory if it doesn't exist
 mkdir -p "$BACKUP_DIR"

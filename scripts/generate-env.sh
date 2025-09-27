@@ -21,7 +21,6 @@
 #
 # OPTIONS:
 #   -f, --force         Force overwrite existing .env file
-#   -u, --update-only   Only update placeholder values in existing .env
 #   -v, --validate      Validate environment after generation
 #   -h, --help          Show help message
 #
@@ -32,15 +31,11 @@
 #   # Force create new .env (overwrites existing)
 #   ./scripts/generate-env.sh -f
 #
-#   # Update existing .env with secure values for placeholders
-#   ./scripts/generate-env.sh -u
-#
 #   # Generate and validate configuration
 #   ./scripts/generate-env.sh -v
 #
 # GENERATED VALUES:
 #   - POSTGRES_PASSWORD: 32-character random password
-#   - POSTGRES_NON_ROOT_PASSWORD: 32-character random password
 #   - N8N_ENCRYPTION_KEY: 32-character base64 encryption key
 #   - N8N_JWT_SECRET: 64-character base64 JWT secret
 #   - PGADMIN_PASSWORD: 16-character random password
@@ -106,7 +101,7 @@ generate_password() {
 # Function to generate encryption key
 generate_encryption_key() {
     if command -v openssl &> /dev/null; then
-        openssl rand -base64 32
+        openssl rand -base64 32 | tr -d '\n'
     else
         generate_password 32
     fi
@@ -115,7 +110,7 @@ generate_encryption_key() {
 # Function to generate JWT secret
 generate_jwt_secret() {
     if command -v openssl &> /dev/null; then
-        openssl rand -base64 64
+        openssl rand -base64 64 | tr -d '\n'
     else
         generate_password 64
     fi
@@ -128,10 +123,9 @@ check_existing_env() {
         echo
         echo "Options:"
         echo "  1) Backup existing and create new"
-        echo "  2) Update only missing/placeholder values"
-        echo "  3) Exit without changes"
+        echo "  2) Exit without changes"
         echo
-        read -p "Choose option (1-3): " choice
+        read -p "Choose option (1-2): " choice
 
         case $choice in
             1)
@@ -140,9 +134,6 @@ check_existing_env() {
                 return 0
                 ;;
             2)
-                return 1  # Update mode
-                ;;
-            3)
                 print_status "Operation cancelled"
                 exit 0
                 ;;
@@ -161,7 +152,6 @@ create_new_env() {
 
     # Generate secure values
     local postgres_password=$(generate_password 32)
-    local postgres_n8n_password=$(generate_password 32)
     local n8n_encryption_key=$(generate_encryption_key)
     local n8n_jwt_secret=$(generate_jwt_secret)
     local pgadmin_password=$(generate_password 16)
@@ -178,9 +168,6 @@ create_new_env() {
         case "$line" in
             *"your_secure_postgres_password_here"*)
                 echo "${line//your_secure_postgres_password_here/$postgres_password}"
-                ;;
-            *"your_secure_n8n_db_password_here"*)
-                echo "${line//your_secure_n8n_db_password_here/$postgres_n8n_password}"
                 ;;
             *"your_32_character_encryption_key_here"*)
                 echo "${line//your_32_character_encryption_key_here/$n8n_encryption_key}"
@@ -206,84 +193,11 @@ create_new_env() {
     echo
     print_status "Generated credentials:"
     echo "  PostgreSQL Admin Password: $postgres_password"
-    echo "  PostgreSQL n8n Password: $postgres_n8n_password"
     echo "  PgAdmin Password: $pgadmin_password"
     echo "  n8n Encryption Key: $n8n_encryption_key"
     echo "  n8n JWT Secret: $n8n_jwt_secret"
 }
 
-# Function to update existing .env file
-update_existing_env() {
-    print_status "Updating existing .env file..."
-
-    # Source the existing file
-    source "$ENV_FILE"
-
-    local updated=false
-
-    # Check and update placeholder passwords using safe string replacement
-    temp_file=$(mktemp)
-
-    while IFS= read -r line; do
-        case "$line" in
-            POSTGRES_PASSWORD=*)
-                if [[ "$POSTGRES_PASSWORD" == *"your_"* ]] || [ -z "$POSTGRES_PASSWORD" ]; then
-                    local new_password=$(generate_password 32)
-                    echo "POSTGRES_PASSWORD=$new_password"
-                    print_status "Updated PostgreSQL admin password"
-                    echo "  New PostgreSQL Admin Password: $new_password"
-                    updated=true
-                else
-                    echo "$line"
-                fi
-                ;;
-            POSTGRES_NON_ROOT_PASSWORD=*)
-                if [[ "$POSTGRES_NON_ROOT_PASSWORD" == *"your_"* ]] || [ -z "$POSTGRES_NON_ROOT_PASSWORD" ]; then
-                    local new_password=$(generate_password 32)
-                    echo "POSTGRES_NON_ROOT_PASSWORD=$new_password"
-                    print_status "Updated PostgreSQL n8n user password"
-                    echo "  New PostgreSQL n8n Password: $new_password"
-                    updated=true
-                else
-                    echo "$line"
-                fi
-                ;;
-            N8N_ENCRYPTION_KEY=*)
-                if [[ "$N8N_ENCRYPTION_KEY" == *"your_"* ]] || [ -z "$N8N_ENCRYPTION_KEY" ] || [ ${#N8N_ENCRYPTION_KEY} -lt 32 ]; then
-                    local new_key=$(generate_encryption_key)
-                    echo "N8N_ENCRYPTION_KEY=$new_key"
-                    print_status "Updated n8n encryption key"
-                    echo "  New n8n Encryption Key: $new_key"
-                    updated=true
-                else
-                    echo "$line"
-                fi
-                ;;
-            N8N_JWT_SECRET=*)
-                if [[ "$N8N_JWT_SECRET" == *"your_"* ]] || [ -z "$N8N_JWT_SECRET" ]; then
-                    local new_secret=$(generate_jwt_secret)
-                    echo "N8N_JWT_SECRET=$new_secret"
-                    print_status "Updated n8n JWT secret"
-                    echo "  New n8n JWT Secret: [64 characters]"
-                    updated=true
-                else
-                    echo "$line"
-                fi
-                ;;
-            *)
-                echo "$line"
-                ;;
-        esac
-    done < "$ENV_FILE" > "$temp_file"
-
-    mv "$temp_file" "$ENV_FILE"
-
-    if [ "$updated" = true ]; then
-        print_success "Environment file updated with secure values"
-    else
-        print_success "No placeholder values found - environment file is already configured"
-    fi
-}
 
 # Function to validate generated environment
 validate_env() {
@@ -332,14 +246,12 @@ show_help() {
     echo
     echo "Options:"
     echo "  -f, --force            Force overwrite existing .env file"
-    echo "  -u, --update-only      Only update placeholder values in existing .env"
     echo "  -v, --validate         Validate environment after generation"
     echo "  -h, --help             Show this help message"
     echo
     echo "Examples:"
     echo "  $0                     # Interactive mode"
     echo "  $0 -f                  # Force create new .env"
-    echo "  $0 -u                  # Update existing .env only"
     echo "  $0 -v                  # Generate and validate"
     echo
     echo "This script generates secure passwords and encryption keys for:"
@@ -357,7 +269,6 @@ main() {
     echo
 
     local force_mode=false
-    local update_only=false
     local validate_after=false
 
     # Parse arguments
@@ -365,10 +276,6 @@ main() {
         case $1 in
             -f|--force)
                 force_mode=true
-                shift
-                ;;
-            -u|--update-only)
-                update_only=true
                 shift
                 ;;
             -v|--validate)
@@ -400,20 +307,10 @@ main() {
             print_status "Existing .env backed up"
         fi
         create_new_env
-    elif [ "$update_only" = true ]; then
-        if [ ! -f "$ENV_FILE" ]; then
-            print_error ".env file does not exist - cannot update"
-            print_status "Run without -u flag to create new .env file"
-            exit 1
-        fi
-        update_existing_env
     else
         # Interactive mode
-        if check_existing_env; then
-            create_new_env
-        else
-            update_existing_env
-        fi
+        check_existing_env
+        create_new_env
     fi
 
     # Validate if requested

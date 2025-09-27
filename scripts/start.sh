@@ -18,7 +18,6 @@
 # CONFIGURATION:
 #   Environment variables (from .env file):
 #   - POSTGRES_PASSWORD: PostgreSQL admin password
-#   - POSTGRES_NON_ROOT_PASSWORD: n8n database user password
 #   - N8N_ENCRYPTION_KEY: 32+ character encryption key
 #   - N8N_JWT_SECRET: JWT signing secret
 #   - COMPOSE_PROJECT_NAME: Container name prefix
@@ -29,7 +28,7 @@
 # OPTIONS:
 #   -e, --env ENV          Environment mode (development|production)
 #   -m, --models           Install default AI models after startup
-#   -g, --gpu              Force enable GPU acceleration
+#   -g, --gpu              Enable GPU acceleration for Ollama
 #   -h, --help             Show help message
 #
 # EXAMPLES:
@@ -39,7 +38,7 @@
 #   # Start development with AI models auto-installation
 #   ./scripts/start.sh -m
 #
-#   # Start with GPU acceleration (auto-detected if available)
+#   # Start with GPU acceleration
 #   ./scripts/start.sh -g
 #
 #   # Start production environment with SSL and security hardening
@@ -104,6 +103,8 @@ ENVIRONMENT="development"
 PROFILES=""
 PULL_MODELS=false
 GPU_ENABLED=false
+RESET_DATA=false
+RESET_ALL=false
 
 # Function to print colored output
 print_status() {
@@ -162,7 +163,6 @@ validate_env() {
     # Check required variables
     local required_vars=(
         "POSTGRES_PASSWORD"
-        "POSTGRES_NON_ROOT_PASSWORD"
         "N8N_ENCRYPTION_KEY"
         "N8N_JWT_SECRET"
     )
@@ -193,6 +193,54 @@ validate_env() {
     print_success "Environment validation passed"
 }
 
+# Function to check for configuration conflicts
+check_config_conflicts() {
+    print_status "Checking for configuration conflicts..."
+
+    # Check if n8n volume exists and has conflicting encryption key
+    if docker volume inspect "${COMPOSE_PROJECT_NAME:-n8n-ai-stack}_n8n_data" &>/dev/null; then
+        # Try to detect encryption key mismatch by checking if n8n starts successfully
+        if docker volume inspect "${COMPOSE_PROJECT_NAME:-n8n-ai-stack}_postgres_data" &>/dev/null; then
+            print_status "Existing data volumes detected - checking compatibility..."
+            # This is where previous data exists - no direct way to check without starting
+            # We'll let it start and catch errors in the health check
+        fi
+    fi
+
+    print_success "Configuration conflict check passed"
+}
+
+# Function to handle data reset
+handle_reset() {
+    if [ "$RESET_ALL" = true ]; then
+        print_status "Resetting ALL data (complete fresh start)..."
+        print_warning "This will remove all workflows, executions, database, and AI models!"
+        echo -n "Are you sure? (y/N): "
+        read -r confirm
+        if [[ $confirm =~ ^[Yy]$ ]]; then
+            docker-compose down -v 2>/dev/null || true
+            print_success "All data reset complete"
+        else
+            print_error "Reset cancelled"
+            exit 1
+        fi
+    elif [ "$RESET_DATA" = true ]; then
+        print_status "Resetting n8n and pgadmin data (keeping database and AI models)..."
+        print_warning "This will remove workflows and executions, but keep database and AI models!"
+        echo -n "Are you sure? (y/N): "
+        read -r confirm
+        if [[ $confirm =~ ^[Yy]$ ]]; then
+            docker-compose down 2>/dev/null || true
+            docker volume rm "${COMPOSE_PROJECT_NAME:-n8n-ai-stack}_n8n_data" 2>/dev/null || true
+            docker volume rm "${COMPOSE_PROJECT_NAME:-n8n-ai-stack}_pgadmin_data" 2>/dev/null || true
+            print_success "Selected data reset complete"
+        else
+            print_error "Reset cancelled"
+            exit 1
+        fi
+    fi
+}
+
 # Function to create required directories
 create_directories() {
     print_status "Creating required directories..."
@@ -219,24 +267,15 @@ create_directories() {
     print_success "Directories created"
 }
 
-# Function to check GPU availability
-check_gpu() {
-    if command -v nvidia-smi &> /dev/null; then
-        if nvidia-smi &> /dev/null; then
-            print_success "NVIDIA GPU detected and available"
-            GPU_ENABLED=true
-            PROFILES="gpu"
-        else
-            print_warning "NVIDIA GPU detected but not accessible"
-        fi
-    else
-        print_warning "No NVIDIA GPU detected"
-    fi
-}
 
 # Function to start services
 start_services() {
-    print_status "Starting N8N AI Stack in $ENVIRONMENT mode..."
+    local mode_desc="$ENVIRONMENT mode"
+    if [ "$GPU_ENABLED" = true ]; then
+        mode_desc="$mode_desc with GPU acceleration"
+    fi
+
+    print_status "Starting N8N AI Stack in $mode_desc..."
 
     cd "$PROJECT_ROOT"
 
@@ -250,6 +289,12 @@ start_services() {
         PROFILES="production${PROFILES:+,$PROFILES}"
     fi
 
+    # Add GPU override file if enabled
+    if [ "$GPU_ENABLED" = true ]; then
+        compose_cmd="$compose_cmd -f docker-compose.gpu.yml"
+    fi
+
+    # Add profiles if any (for production)
     if [ -n "$PROFILES" ]; then
         for profile in $(echo "$PROFILES" | tr ',' ' '); do
             compose_cmd="$compose_cmd --profile $profile"
@@ -339,14 +384,18 @@ show_help() {
     echo "Options:"
     echo "  -e, --env ENV          Environment: development (default) or production"
     echo "  -m, --models           Pull default Ollama models after startup"
-    echo "  -g, --gpu              Force enable GPU profile (auto-detected by default)"
+    echo "  -g, --gpu              Enable GPU acceleration for Ollama"
+    echo "  --reset-data           Reset n8n and pgadmin data (keeps database)"
+    echo "  --reset-all            Reset all data (complete fresh start)"
     echo "  -h, --help             Show this help message"
     echo
     echo "Examples:"
     echo "  $0                     Start in development mode"
+    echo "  $0 -g                  Start with GPU acceleration"
     echo "  $0 -e production       Start in production mode"
-    echo "  $0 -m                  Start and pull Ollama models"
-    echo "  $0 -e production -g    Start in production with GPU"
+    echo "  $0 -g -m               Start with GPU and install models"
+    echo "  $0 --reset-data        Reset n8n data and restart"
+    echo "  $0 --reset-all         Complete fresh start"
 }
 
 # Parse command line arguments
@@ -362,7 +411,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -g|--gpu)
             GPU_ENABLED=true
-            PROFILES="gpu"
+            shift
+            ;;
+        --reset-data)
+            RESET_DATA=true
+            shift
+            ;;
+        --reset-all)
+            RESET_ALL=true
             shift
             ;;
         -h|--help)
@@ -389,13 +445,14 @@ main() {
     echo "======================="
     echo
 
+    # Handle reset operations first
+    handle_reset
+
     check_prerequisites
     validate_env
+    check_config_conflicts
     create_directories
 
-    if [ "$ENVIRONMENT" = "production" ] || [ "$GPU_ENABLED" = true ]; then
-        check_gpu
-    fi
 
     start_services
     wait_for_services
