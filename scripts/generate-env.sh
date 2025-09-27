@@ -169,12 +169,36 @@ create_new_env() {
     # Copy from example
     cp "$ENV_EXAMPLE" "$ENV_FILE"
 
-    # Replace placeholder values
-    sed -i "s/your_secure_postgres_password_here/$postgres_password/g" "$ENV_FILE"
-    sed -i "s/your_secure_n8n_db_password_here/$postgres_n8n_password/g" "$ENV_FILE"
-    sed -i "s/your_32_character_encryption_key_here/$n8n_encryption_key/g" "$ENV_FILE"
-    sed -i "s/your_jwt_secret_here/$n8n_jwt_secret/g" "$ENV_FILE"
-    sed -i "s/admin123/$pgadmin_password/g" "$ENV_FILE"
+    # Replace placeholder values using environment variables and envsubst-like approach
+    # Create a temporary file with the replacements
+    temp_file=$(mktemp)
+
+    # Use a here document to avoid sed escaping issues
+    while IFS= read -r line; do
+        case "$line" in
+            *"your_secure_postgres_password_here"*)
+                echo "${line//your_secure_postgres_password_here/$postgres_password}"
+                ;;
+            *"your_secure_n8n_db_password_here"*)
+                echo "${line//your_secure_n8n_db_password_here/$postgres_n8n_password}"
+                ;;
+            *"your_32_character_encryption_key_here"*)
+                echo "${line//your_32_character_encryption_key_here/$n8n_encryption_key}"
+                ;;
+            *"your_jwt_secret_here"*)
+                echo "${line//your_jwt_secret_here/$n8n_jwt_secret}"
+                ;;
+            *"admin123"*)
+                echo "${line//admin123/$pgadmin_password}"
+                ;;
+            *)
+                echo "$line"
+                ;;
+        esac
+    done < "$ENV_FILE" > "$temp_file"
+
+    # Move the temporary file to replace the original
+    mv "$temp_file" "$ENV_FILE"
 
     print_success ".env file created with secure passwords"
 
@@ -185,9 +209,7 @@ create_new_env() {
     echo "  PostgreSQL n8n Password: $postgres_n8n_password"
     echo "  PgAdmin Password: $pgadmin_password"
     echo "  n8n Encryption Key: $n8n_encryption_key"
-    echo "  n8n JWT Secret: [64 characters - check .env file]"
-    echo
-    print_warning "Save these credentials securely!"
+    echo "  n8n JWT Secret: $n8n_jwt_secret"
 }
 
 # Function to update existing .env file
@@ -199,43 +221,65 @@ update_existing_env() {
 
     local updated=false
 
-    # Check and update placeholder passwords
-    if [[ "$POSTGRES_PASSWORD" == *"your_"* ]] || [ -z "$POSTGRES_PASSWORD" ]; then
-        local new_password=$(generate_password 32)
-        sed -i "s/POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$new_password/g" "$ENV_FILE"
-        print_status "Updated PostgreSQL admin password"
-        echo "  New PostgreSQL Admin Password: $new_password"
-        updated=true
-    fi
+    # Check and update placeholder passwords using safe string replacement
+    temp_file=$(mktemp)
 
-    if [[ "$POSTGRES_NON_ROOT_PASSWORD" == *"your_"* ]] || [ -z "$POSTGRES_NON_ROOT_PASSWORD" ]; then
-        local new_password=$(generate_password 32)
-        sed -i "s/POSTGRES_NON_ROOT_PASSWORD=.*/POSTGRES_NON_ROOT_PASSWORD=$new_password/g" "$ENV_FILE"
-        print_status "Updated PostgreSQL n8n user password"
-        echo "  New PostgreSQL n8n Password: $new_password"
-        updated=true
-    fi
+    while IFS= read -r line; do
+        case "$line" in
+            POSTGRES_PASSWORD=*)
+                if [[ "$POSTGRES_PASSWORD" == *"your_"* ]] || [ -z "$POSTGRES_PASSWORD" ]; then
+                    local new_password=$(generate_password 32)
+                    echo "POSTGRES_PASSWORD=$new_password"
+                    print_status "Updated PostgreSQL admin password"
+                    echo "  New PostgreSQL Admin Password: $new_password"
+                    updated=true
+                else
+                    echo "$line"
+                fi
+                ;;
+            POSTGRES_NON_ROOT_PASSWORD=*)
+                if [[ "$POSTGRES_NON_ROOT_PASSWORD" == *"your_"* ]] || [ -z "$POSTGRES_NON_ROOT_PASSWORD" ]; then
+                    local new_password=$(generate_password 32)
+                    echo "POSTGRES_NON_ROOT_PASSWORD=$new_password"
+                    print_status "Updated PostgreSQL n8n user password"
+                    echo "  New PostgreSQL n8n Password: $new_password"
+                    updated=true
+                else
+                    echo "$line"
+                fi
+                ;;
+            N8N_ENCRYPTION_KEY=*)
+                if [[ "$N8N_ENCRYPTION_KEY" == *"your_"* ]] || [ -z "$N8N_ENCRYPTION_KEY" ] || [ ${#N8N_ENCRYPTION_KEY} -lt 32 ]; then
+                    local new_key=$(generate_encryption_key)
+                    echo "N8N_ENCRYPTION_KEY=$new_key"
+                    print_status "Updated n8n encryption key"
+                    echo "  New n8n Encryption Key: $new_key"
+                    updated=true
+                else
+                    echo "$line"
+                fi
+                ;;
+            N8N_JWT_SECRET=*)
+                if [[ "$N8N_JWT_SECRET" == *"your_"* ]] || [ -z "$N8N_JWT_SECRET" ]; then
+                    local new_secret=$(generate_jwt_secret)
+                    echo "N8N_JWT_SECRET=$new_secret"
+                    print_status "Updated n8n JWT secret"
+                    echo "  New n8n JWT Secret: [64 characters]"
+                    updated=true
+                else
+                    echo "$line"
+                fi
+                ;;
+            *)
+                echo "$line"
+                ;;
+        esac
+    done < "$ENV_FILE" > "$temp_file"
 
-    if [[ "$N8N_ENCRYPTION_KEY" == *"your_"* ]] || [ -z "$N8N_ENCRYPTION_KEY" ] || [ ${#N8N_ENCRYPTION_KEY} -lt 32 ]; then
-        local new_key=$(generate_encryption_key)
-        sed -i "s/N8N_ENCRYPTION_KEY=.*/N8N_ENCRYPTION_KEY=$new_key/g" "$ENV_FILE"
-        print_status "Updated n8n encryption key"
-        echo "  New n8n Encryption Key: $new_key"
-        updated=true
-    fi
-
-    if [[ "$N8N_JWT_SECRET" == *"your_"* ]] || [ -z "$N8N_JWT_SECRET" ]; then
-        local new_secret=$(generate_jwt_secret)
-        sed -i "s/N8N_JWT_SECRET=.*/N8N_JWT_SECRET=$new_secret/g" "$ENV_FILE"
-        print_status "Updated n8n JWT secret"
-        echo "  New n8n JWT Secret: [64 characters]"
-        updated=true
-    fi
+    mv "$temp_file" "$ENV_FILE"
 
     if [ "$updated" = true ]; then
         print_success "Environment file updated with secure values"
-        echo
-        print_warning "Save the new credentials securely!"
     else
         print_success "No placeholder values found - environment file is already configured"
     fi
@@ -376,8 +420,6 @@ main() {
     if [ "$validate_after" = true ]; then
         validate_env
     fi
-
-    show_next_steps
 }
 
 # Run main function
